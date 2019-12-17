@@ -8,11 +8,11 @@ Connection::Connection(QString url) {
     m_Url = std::move(url);
 }
 
-std::future<void> Connection::start() {
+std::promise<void> Connection::start() {
     throw QException();
 }
 
-std::future<void> Connection::start(std::shared_ptr<transports::IClientTransport> pClientTransport) {
+std::promise<void> Connection::start(std::shared_ptr<transports::IClientTransport> pClientTransport) {
    throw QException();
 }
 

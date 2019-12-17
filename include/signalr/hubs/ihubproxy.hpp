@@ -11,15 +11,15 @@ namespace signalr {
 class IHubProxy {
 public:
 
-    template<typename ...Args>
-    std::future<void> invoke(const QString& methodname, Args...){
-        throw QException();
-    }
+//    template<typename ...Args>
+//    std::promise<void> invoke(const QString& methodname, Args...){
+//        throw QException();
+//    }
 
-    template<typename T, typename ...Args>
-    std::future<T> invoke(const QString &methodname, Args...) {
-        throw QException();
-    }
+//    template<typename T, typename ...Args>
+//    std::promise<T> invoke(const QString &methodname, Args...) {
+//        throw QException();
+//    }
 
     virtual ~IHubProxy() = default;
 

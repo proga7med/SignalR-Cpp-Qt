@@ -16,14 +16,14 @@ public:
      * @brief start
      * @return
      */
-    virtual std::future<void> start() = 0;
+    virtual std::promise<void> start() = 0;
 
     /**
      * @brief start
      * @param pClientTransport
      * @return
      */
-    virtual std::future<void> start(std::shared_ptr<transports::IClientTransport> pClientTransport) = 0;
+    virtual std::promise<void> start(std::shared_ptr<transports::IClientTransport> pClientTransport) = 0;
 
     /**
      * @brief stop

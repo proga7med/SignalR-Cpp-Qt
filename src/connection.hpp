@@ -13,8 +13,8 @@ class Connection : public IConnection {
 public:
     Connection(QString url);
 
-    virtual std::future<void> start() override;
-    virtual std::future<void> start(std::shared_ptr<transports::IClientTransport> pClientTransport) override;
+    virtual std::promise<void> start() override;
+    virtual std::promise<void> start(std::shared_ptr<transports::IClientTransport> pClientTransport) override;
 
     virtual void stop() override;
     virtual void stop(int timeout) override;
