@@ -1,0 +1,6 @@
+[submodule "submodules/qtpromise"]
+	path = submodules/qtpromise
+	url = https://github.com/simonbrunel/qtpromise.git
+[submodule "submodules/time_delta"]
+	path = submodules/time_delta
+	url = https://github.com/cardinalby/time_delta.git
