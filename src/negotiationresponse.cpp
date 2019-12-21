@@ -1,4 +1,4 @@
-#include "negotiationresponse.hpp"
+#include "signalr/negotiationresponse.hpp"
 
 namespace signalr {
 

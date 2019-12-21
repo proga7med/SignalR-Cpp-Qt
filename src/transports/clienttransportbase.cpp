@@ -14,17 +14,17 @@ ClientTransportBase::ClientTransportBase(std::shared_ptr<http::IHttpClient> pHtt
   m_TransportHelper = std::move(transportHelper);
 }
 
-std::future<NegotiationResponse> ClientTransportBase::negotiate(std::shared_ptr<IConnection> pConnection, QString connectionData) {
+QtPromise::QPromise<NegotiationResponse> ClientTransportBase::negotiate(std::shared_ptr<IConnection> pConnection, const QString &connectionData) {
   if(m_Finished) throw QException();
   throw QException(); //return TransportHelper::getNegotiationResponse(pHttpClient, pConnection, connectionData);
 }
 
-std::future<void> ClientTransportBase::start(std::shared_ptr<IConnection> pConnection, const QString& connectionData, const CancellationToken& cancellationToken) {
+QtPromise::QPromise<void> ClientTransportBase::start(std::shared_ptr<IConnection> pConnection, const QString& connectionData) {
   if(pConnection == nullptr) throw QException();
 
   //QObject::connect()
 
-  onStart(pConnection, connectionData, cancellationToken);
+  onStart(pConnection, connectionData);
   throw QException(); //return
 }
 
@@ -32,12 +32,12 @@ void ClientTransportBase::transportFailed(const QException& ex) {
   //
 }
 
-void ClientTransportBase::abort(std::shared_ptr<IConnection> pConnection, const QElapsedTimer& timeout, const QString& connectionData) {
+void ClientTransportBase::abort(std::shared_ptr<IConnection> pConnection, const TimeDelta& timeout, const QString& connectionData) {
     m_Finished = true;
     //emit abort
 }
 
-bool ClientTransportBase::processResponse(std::shared_ptr<IConnection> pConnection, QString response) {
+bool ClientTransportBase::processResponse(std::shared_ptr<IConnection> pConnection, const QString& response) {
   if(pConnection == nullptr) throw QException();
 
   //pConnection->markLastMessage();
@@ -51,6 +51,11 @@ bool ClientTransportBase::processResponse(std::shared_ptr<IConnection> pConnecti
   catch(const QException& ex) {
       //pConnection->onError(ex);
   }
+  return shouldReconnect;
+}
+
+QString ClientTransportBase::getName() const {
+  return m_TransportName;
 }
 
 

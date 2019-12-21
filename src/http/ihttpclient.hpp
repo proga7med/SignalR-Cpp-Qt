@@ -7,9 +7,9 @@
 #include <QHash>
 #include <QString>
 
-#include "irequest.hpp"
 #include "iresponse.hpp"
 #include "signalr/iconnection.hpp"
+#include "signalr/http/irequest.hpp"
 
 namespace signalr {
 namespace http {

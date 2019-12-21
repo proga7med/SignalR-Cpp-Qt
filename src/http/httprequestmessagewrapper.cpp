@@ -30,13 +30,12 @@ void HttpRequestMessageWrapper::abort() {
    emit cancel();
 }
 
-void HttpRequestMessageWrapper::setRequestHeaders(QHash<QString, QString>& headers) {
+void HttpRequestMessageWrapper::setRequestHeaders(QList<QPair<QString, QString>>& headers) {
 	if (m_UserAgent.isNull()) throw QException();
 	if (m_Accept.isNull()) throw QException();
 
-	QHash<QString, QString>::iterator it;
-	for (it = headers.begin(); it != headers.end(); ++it) {
-        m_pNetworkRequest->setRawHeader(it.key().toLatin1(), it.value().toLatin1());
+    for (auto const& header : headers) {
+      m_pNetworkRequest->setRawHeader(header.first.toLatin1(), header.second.toLatin1());
 	}
 }
 

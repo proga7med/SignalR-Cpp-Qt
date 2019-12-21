@@ -5,7 +5,7 @@
 #include <QElapsedTimer>
 #include "transporthelper.hpp"
 #include "http/ihttpclient.hpp"
-#include "negotiationresponse.hpp"
+#include "signalr/negotiationresponse.hpp"
 #include "signalr/transports/iclienttransport.hpp"
 
 namespace signalr {
@@ -17,26 +17,30 @@ protected:
 
 public:
     ClientTransportBase(std::shared_ptr<http::IHttpClient> pHttpClient, QString transportName, TransportHelper transportHelper);
-    std::future<NegotiationResponse> negotiate(std::shared_ptr<IConnection> pConnection, QString connectionData);
+    QtPromise::QPromise<NegotiationResponse> negotiate(std::shared_ptr<IConnection> pConnection, const QString &connectionData);
 
-    virtual std::future<void> start(std::shared_ptr<IConnection> pConnection, const QString& connectionData, const CancellationToken& cancellationToken) override;
-    virtual void abort(std::shared_ptr<IConnection> pConnection, const QElapsedTimer& timeout, const QString& connectionData);
+    virtual QtPromise::QPromise<void> start(std::shared_ptr<IConnection> pConnection, const QString& connectionData) override;
+    virtual void abort(std::shared_ptr<IConnection> pConnection, const TimeDelta& timeout, const QString& connectionData);
 
-    virtual std::future<void> send(std::shared_ptr<IConnection> pConnection, const QString& data, const QString& connectionData) = 0;
+    virtual QtPromise::QPromise<void> send(std::shared_ptr<IConnection> pConnection, const QString& data, const QString& connectionData) = 0;
     virtual void lostConnection(std::shared_ptr<IConnection> pConnection) = 0;
+    virtual QString getName() const override;
+
 protected:
-    virtual void onStart(std::shared_ptr<IConnection> pConnection, const QString& connectionData, const CancellationToken& cancellationToken) = 0;
+    virtual void onStart(std::shared_ptr<IConnection> pConnection, const QString& connectionData) = 0;
     virtual void onStartFailed() = 0;
 
     void transportFailed(const QException& ex);
 
-    virtual bool processResponse(std::shared_ptr<IConnection> pConnection, QString response);
+    virtual bool processResponse(std::shared_ptr<IConnection> pConnection, const QString& response);
+
 
 private:
     QString m_TransportName;
     bool m_Finished;
     std::shared_ptr<http::IHttpClient> m_pHttpClient;
     TransportHelper m_TransportHelper;
+    bool m_SupportKeepAlive;
 };
 }
 

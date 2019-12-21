@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QNetworkRequest>
 
-#include "irequest.hpp"
+#include "signalr/http/irequest.hpp"
 
 namespace signalr {
 namespace http {
@@ -21,7 +21,7 @@ public:
 	virtual void setAccept(QString accept) override;
 
 	virtual void abort() override;
-	virtual void setRequestHeaders(QHash<QString, QString>& headers) override;
+    virtual void setRequestHeaders(QList<QPair<QString, QString>> &headers) override;
 
 	virtual ~HttpRequestMessageWrapper() = default;
 

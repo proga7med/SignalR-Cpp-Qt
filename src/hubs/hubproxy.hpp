@@ -3,7 +3,6 @@
 
 #include <tuple>
 #include <QVector>
-#include "infra/Action.hpp"
 #include "signalr/hubs/ihubproxy.hpp"
 #include "signalr/hubs/ihubconnection.hpp"
 #include "signalr/hubs/subscription.hpp"

@@ -3,25 +3,28 @@
 
 #include <future>
 #include <QString>
+
+#include <QtPromise>
+#include <time_delta.h>
+
 #include "signalr/cancellationtoken.hpp"
+#include "signalr/negotiationresponse.hpp"
 
 namespace signalr {
-namespace transports {
 
 class IConnection;
+namespace transports {
 
 class IClientTransport {
 public:
-   virtual std::future<void> start(std::shared_ptr<IConnection> pConnection, const QString& connectionData, const CancellationToken& cancellationToken) = 0;
-   virtual std::future<void> send(std::shared_ptr<IConnection> pConnection, const QString& data, const QString& connectionData) = 0;
-   virtual void abort(std::shared_ptr<IConnection> pConnection, int timeout, const QString& connectionData) = 0; 
-   QString getName() const { return m_Name; }
-   bool isSupportKeepAlive() const { return m_SupportKeepAlive; }
-   virtual ~IClientTransport() = default;
+  virtual QtPromise::QPromise<NegotiationResponse> negotiate(std::shared_ptr<IConnection> pConnection, const QString& connectionData) = 0;
+  virtual QtPromise::QPromise<void> start(std::shared_ptr<IConnection> pConnection, const QString& connectionData) = 0;
+  virtual QtPromise::QPromise<void> send(std::shared_ptr<IConnection> pConnection, const QString& data, const QString& connectionData) = 0;
+  virtual void abort(std::shared_ptr<IConnection> pConnection, const TimeDelta& timeout, const QString& connectionData) = 0;
+  virtual QString getName() const = 0;
+  virtual bool isKeepAliveSupported() const = 0;
+  virtual ~IClientTransport() = default;
 
-private:
-    QString m_Name;
-    bool m_SupportKeepAlive;
 };
 
 }
