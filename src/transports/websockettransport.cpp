@@ -2,15 +2,24 @@
 
 #include "infra/urlbuilder.hpp"
 #include "signalr/iconnection.hpp"
+#include "http/defaulthttpclient.hpp"
+#include "http/httpwebrequestwrapper.hpp"
 #include "http/httprequestmessagewrapper.hpp"
+#include "websockets/clientwebsockethandler.hpp"
+#include "websockets/websocketwrapperrequest.hpp"
 
 namespace signalr {
 namespace transports {
 
+WebSocketTransport::WebSocketTransport()
+    : WebSocketTransport(std::make_shared<http::DefaultHttpClient>()) {
+}
+
 WebSocketTransport::WebSocketTransport(std::shared_ptr<http::IHttpClient> pHttpClient)
     : ClientTransportBase(std::move(pHttpClient), QString("webSockets")){
   m_ReconnectDelay = TimeDelta::FromSeconds(2);
-  //connect signals and slots.
+  m_pWebSocket = std::make_shared<QWebSocket>();
+  m_pHandler = std::make_shared<websockets::ClientWebSocketHandler>(std::shared_ptr<WebSocketTransport>(this));
 }
 
 bool WebSocketTransport::isKeepAliveSupported() const {
@@ -29,21 +38,19 @@ QtPromise::QPromise<void> WebSocketTransport::performConnect() {
 
 QtPromise::QPromise<void> WebSocketTransport::performConnect(const QString& url) {
   auto uri = UrlBuilder::convertToWebSocketUri(url);
-  //trace.
-  //m_pConnection->prepareRequest(WebSocketWrapperRequest)
-  return QtPromise::QPromise<void>([&](const QtPromise::QPromiseResolve<void>& resolve, const QtPromise::QPromiseReject<void>& reject) {
-     m_WebSocket.open(url);
-  });
 
+  QNetworkRequest request = QNetworkRequest(QUrl(uri));
+  auto webSocketWrapperRequest = std::dynamic_pointer_cast<http::IRequest>(std::make_shared<websockets::WebSocketWrapperRequest>(m_pWebSocket, request, m_pConnection));
+  m_pConnection->prepareRequest(webSocketWrapperRequest);
+
+  return m_pHandler->openAsync(request);
 }
 
 QtPromise::QPromise<void> WebSocketTransport::send(std::shared_ptr<IConnection> pConnection, const QString& data, const QString& connectionData) {
-  return QtPromise::QPromise<void>([&](const QtPromise::QPromiseResolve<void>& resolve, const QtPromise::QPromiseReject<void>& reject) {
-    if(pConnection == nullptr) throw QException();
-    if(!m_WebSocket.isValid()) throw QException();
+  if(pConnection == nullptr) throw QException();
+  if(!m_pWebSocket->isValid()) throw QException();
 
-    m_WebSocket.sendTextMessage(data);
-  });
+  return m_pHandler->sendTextMessageAsync(data);
 }
 
 void WebSocketTransport::onStartFailed() {
@@ -76,7 +83,7 @@ void WebSocketTransport::onError(const QException& error) {
 
 void WebSocketTransport::lostConnection(std::shared_ptr<IConnection> pConnection) {
    //trace
-  m_WebSocket.close(QWebSocketProtocol::CloseCode::CloseCodeAbnormalDisconnection);
+  m_pWebSocket->close(QWebSocketProtocol::CloseCode::CloseCodeAbnormalDisconnection);
 }
 
 }

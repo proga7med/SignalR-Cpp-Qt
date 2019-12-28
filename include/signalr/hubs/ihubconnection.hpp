@@ -1,6 +1,7 @@
 #ifndef IHUBCONNECTION_HPP
 #define IHUBCONNECTION_HPP
 
+#include <memory>
 #include <functional>
 
 #include "hubresult.hpp"
@@ -10,7 +11,8 @@
 namespace signalr {
 namespace hubs {
 
-class IHubConnection : public IConnection {
+class IHubConnection : public virtual IConnection {
+  Q_OBJECT
 public:
 
   /**
@@ -19,12 +21,14 @@ public:
    * @return the created hubProxy.
    */
   virtual std::shared_ptr<IHubProxy> createHubProxy(const QString& hubName) = 0;
-  virtual QString registerCallback(std::function<void(HubResult)>) = 0;
+  virtual std::shared_ptr<IHubProxy> operator[] (const QString& hubName) = 0;
+  virtual QString registerCallback(std::function<void(HubResult)> callback) = 0;
   virtual void removeCallback(const QString &callbackId) = 0;
   virtual ~IHubConnection() = default;
 };
 
 } //end hubs
 } //end signalr
+Q_DECLARE_INTERFACE(signalr::hubs::IHubConnection, "IHubConnection")
 
 #endif //IHUBCONNECTION_HPP

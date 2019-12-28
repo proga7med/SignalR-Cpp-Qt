@@ -14,8 +14,8 @@ class HttpResponseMessageWrapper : public QObject, public IResponse {
 public:
     HttpResponseMessageWrapper(QNetworkReply* pNetworkReply);
     QString readAsString();
-    QDataStream getStream() const override;
-    ~HttpResponseMessageWrapper() = default;
+    QByteArray getStream() const override;
+    virtual ~HttpResponseMessageWrapper() = default;
 
 private:
     QNetworkReply* m_pNetworkReply;

@@ -1,8 +1,12 @@
 #include "defaulthttpclient.hpp"
 
+#include <QDebug>
+#include <QUrlQuery>
 #include <QNetworkReply>
 #include <QCoreApplication>
 
+#include "httphelper.hpp"
+#include "defaulthttphandler.hpp"
 #include "httprequestmessagewrapper.hpp"
 #include "httpresponsemessagewrapper.hpp"
 
@@ -15,53 +19,58 @@ void DefaultHttpClient::initialize(std::shared_ptr<IConnection> pConnection) {
   m_pShortRunningClient = std::make_shared<QNetworkAccessManager>();
 }
 
-std::promise<std::shared_ptr<IResponse>> DefaultHttpClient::get(const QString& url, std::function<void(std::shared_ptr<IRequest>)> prepareRequest, bool isLongRunning) {
+QtPromise::QPromise<std::shared_ptr<IResponse>> DefaultHttpClient::get(const QString& url, std::function<void(std::shared_ptr<IRequest>)> prepareRequest, bool isLongRunning) {
   if (prepareRequest == nullptr) throw QException();
 
-  std::shared_ptr<QNetworkRequest> requestMessage = std::make_shared<QNetworkRequest>(QUrl(url));
+  QNetworkRequest requestMessage = QNetworkRequest(QUrl(url));
   std::shared_ptr<IRequest> request = std::make_shared<HttpRequestMessageWrapper>(requestMessage);
   prepareRequest(request);
 
-  QEventLoop loop;
-  auto httpClient = getHttpClient(isLongRunning);
-  auto reply = httpClient->get(*requestMessage.get());
-  QObject::connect(httpClient.get(), &QNetworkAccessManager::finished, &loop, &QEventLoop::quit);
-  loop.exec(); //wait
+  return QtPromise::QPromise<QNetworkReply*>([&](const QtPromise::QPromiseResolve<QNetworkReply*>& resolver){
+    auto httpClient = getHttpClient(isLongRunning);
+    DefaultHttpHandler handler = DefaultHttpHandler(m_pConnection, requestMessage, httpClient);
+    auto reply = httpClient->get(requestMessage);
+    QObject::connect(reply, &QNetworkReply::finished, [=](){
+        resolver(reply);
+    });
+  })
+  .then([&](QNetworkReply* reply){
+      auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+      if(statusCode != 200) throw QException();
 
-  auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-  if(statusCode != 200) throw QException();
-
-  std::promise<std::shared_ptr<IResponse>> task =
-          std::promise<std::shared_ptr<IResponse>>();
-
-  task.set_value(std::dynamic_pointer_cast<IResponse>(std::make_shared<HttpResponseMessageWrapper>(reply)));
-  return task;
+      return std::dynamic_pointer_cast<IResponse>(std::make_shared<HttpResponseMessageWrapper>(reply));
+  }).fail([&](const QException&){
+    return QtPromise::QPromise<std::shared_ptr<IResponse>>::reject(QString("the status code isn't 200"));
+  });
 }
 
-std::promise<std::shared_ptr<IResponse>> DefaultHttpClient::post(const QString& url, std::function<void(std::shared_ptr<IRequest>)> prepareRequest, QHash<QString, QString> postData, bool isLongRunning) {
+QtPromise::QPromise<std::shared_ptr<IResponse>> DefaultHttpClient::post(const QString& url, std::function<void(std::shared_ptr<IRequest>)> prepareRequest, const QHash<QString, QString>& postData, bool isLongRunning) {
   if (prepareRequest == nullptr) throw QException();
 
-  std::shared_ptr<QNetworkRequest> requestMessage = std::make_shared<QNetworkRequest>(QUrl(url));
+  QNetworkRequest requestMessage = QNetworkRequest(QUrl(url));
   std::shared_ptr<IRequest> request = std::make_shared<HttpRequestMessageWrapper>(requestMessage);
-
   prepareRequest(request);
 
-  QEventLoop loop;
-  auto httpClient = getHttpClient(isLongRunning);
-  auto reply = httpClient->post(*requestMessage.get(), QByteArray()/*TODO: postData.isEmpty() ? QString() : */);
-  QObject::connect(httpClient.get(), &QNetworkAccessManager::finished, &loop, &QEventLoop::quit);
-  loop.exec(); //wait
+  return QtPromise::QPromise<QNetworkReply*>([&](const QtPromise::QPromiseResolve<QNetworkReply*> resolver){
+     auto httpClient = getHttpClient(isLongRunning);
+     DefaultHttpHandler handler = DefaultHttpHandler(m_pConnection, requestMessage, httpClient);
+     auto reply = httpClient->post(requestMessage,  postData.isEmpty() ? QByteArray() : HttpHelper::processPostData(postData));
+     QObject::connect(reply, &QNetworkReply::finished, [=](){
+         qDebug() << reply->errorString();
+         resolver(reply);
+     });
+  })
+  .then([&](QNetworkReply* reply){
+      auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+      if(statusCode != 200) throw QException();
 
-  auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-  if(statusCode != 200) throw QException();
-
-  std::promise<std::shared_ptr<IResponse>> task =
-          std::promise<std::shared_ptr<IResponse>>();
-
-  task.set_value(std::dynamic_pointer_cast<IResponse>(std::make_shared<HttpResponseMessageWrapper>(reply)));
-  return task;
+      return std::dynamic_pointer_cast<IResponse>(std::make_shared<HttpResponseMessageWrapper>(reply));
+  });
 }
 
+std::shared_ptr<QNetworkAccessManager> DefaultHttpClient::getHttpClient(bool isLongRunning) const {
+  return isLongRunning ? m_pLongRunningClient : m_pShortRunningClient;
+}
 
 }
 }

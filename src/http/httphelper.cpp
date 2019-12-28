@@ -3,6 +3,8 @@
 #include <QEventLoop>
 #include <QException>
 
+#include "infra/urlencoder.hpp"
+
 namespace signalr {
 namespace http {
 
@@ -32,7 +34,15 @@ std::promise<QNetworkReply*> HttpHelper::postAsync(const QString& url, std::func
 }
 
 QByteArray HttpHelper::processPostData(const QHash<QString, QString>& postData) {
-  throw QException();
+  if(postData.isEmpty()) return nullptr;
+  QString stringBuilder;
+  QHash<QString, QString>::const_iterator it;
+  for(it = postData.begin(); it != postData.end(); ++it) {
+    if(stringBuilder.length() > 0) stringBuilder.append("&");
+    if(it.key().isNull() || it.key().isEmpty()) continue;
+    stringBuilder.append(it.key()).append("=").append(infra::UrlEncoder::urlEncode(it.value()));
+  }
+  return stringBuilder.toUtf8();
 }
 
 }

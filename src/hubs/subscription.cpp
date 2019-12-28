@@ -3,8 +3,8 @@
 namespace signalr {
 namespace hubs {
 
-void Subscription::onReceived(const QList<QJsonValue>& data) {
-//  emit received(data);
+void Subscription::onReceived(const QJsonArray &data) {
+  emit received(data);
 }
 
 }

@@ -8,17 +8,16 @@
 namespace signalr {
 namespace hubs {
 
-class Subscription /*: public QObject*/ {
-//    Q_OBJECT
+class Subscription : public QObject {
+  Q_OBJECT
 public:
-    Subscription() = default;
+  Subscription() = default;
 
-    void onReceived(const QList<QJsonValue> &data);
+  void onReceived(const QJsonArray &data);
 
-//signals:
-//    void received(const QList<QJsonValue>&);
+signals:
+  void received(const QJsonArray&);
 };
-
 
 }
 }

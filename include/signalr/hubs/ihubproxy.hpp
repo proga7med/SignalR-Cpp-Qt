@@ -1,30 +1,27 @@
 #ifndef IHUBPROXY_HPP
 #define IHUBPROXY_HPP
 
+#include <memory>
+
 #include <QString>
 #include <QException>
+#include <QJsonSerializer>
 
-#include <future>
+#include "signalr/hubs/subscription.hpp"
 
 namespace signalr {
+namespace hubs {
 
 class IHubProxy {
 public:
 
-//    template<typename ...Args>
-//    std::promise<void> invoke(const QString& methodname, Args...){
-//        throw QException();
-//    }
-
-//    template<typename T, typename ...Args>
-//    std::promise<T> invoke(const QString &methodname, Args...) {
-//        throw QException();
-//    }
-
-    virtual ~IHubProxy() = default;
+  virtual std::shared_ptr<QJsonSerializer> getJsonSerializer() const = 0;
+  virtual std::shared_ptr<Subscription> subscribe(const QString& eventName) = 0;
+  virtual ~IHubProxy() = default;
 
 };
 
+}
 }
 
 #endif //IHUBPROXY_HPP

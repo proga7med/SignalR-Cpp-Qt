@@ -2,9 +2,11 @@
 
 #include <utility>
 
+#include <QBuffer>
 #include <QJsonDocument>
 
 #include "signalr/transports/websockettransport.hpp"
+#include "signalr/hubs/hubconnection.hpp"
 
 namespace signalr {
 
@@ -15,6 +17,7 @@ QVersionNumber Connection::m_MaximumSupportedVersion = QVersionNumber(2, 1);
 QVersionNumber Connection::m_MinimumSupportedNegotiateRedirectVersion = QVersionNumber(2, 0);
 int Connection::m_MaxRedirects = 100;
 QVersionNumber Connection::m_AssemblyVersion;
+bool Connection::m_IsRegistered = false;
 
 Connection::Connection(QString url)
     : Connection(std::move(url), QString()) {
@@ -41,10 +44,21 @@ Connection::Connection(QString url, QString queryString)
   //Trace
   //Trace
   //m_Headers =
+  m_pJsonSerializer = std::make_shared<QJsonSerializer>();
   m_TransportConnectTimeout = TimeDelta::FromSeconds(0);
   m_TotalTransportConnectTimeout = TimeDelta::FromSeconds(0);
   m_DeadlockErrorTimeout = TimeDelta::FromSeconds(10);
   m_Protocol = QVersionNumber(2, 1);
+
+  registerJsonMetaTypes();
+}
+
+TimeDelta Connection::getTrasnportConnectTimeout() const {
+  return m_TransportConnectTimeout;
+}
+
+void Connection::setTransportConnectTimeout(TimeDelta transportConnectTimeout) {
+  m_TransportConnectTimeout = std::move(transportConnectTimeout);
 }
 
 TimeDelta Connection::getTotalTransportConnectTimeout() const {
@@ -87,12 +101,12 @@ QDateTime Connection::getLastActiveAt() const {
   return m_LastActiveAt;
 }
 
-QList<QSslConfiguration> Connection::getCertificates() const {
+QSslConfiguration Connection::getCertificate() const {
   return m_CertCollection;
 }
 
-std::shared_ptr<QNetworkCookieJar> Connection::getCookieContainer() const {
-  return m_pCookieContainer;
+QList<QNetworkCookie> Connection::getCookieContainer() const {
+  return m_CookieContainer;
 }
 
 QAuthenticator Connection::getCredentials() const {
@@ -163,11 +177,23 @@ ConnectionState Connection::getConnectionState() const {
   return m_State;
 }
 
+std::shared_ptr<QJsonSerializer> Connection::getJsonSerializer() const {
+  return m_pJsonSerializer;
+}
+
 void Connection::setConnectionState(ConnectionState state) {
-  std::lock_guard<std::mutex> lock(m_StateLock);
+  std::lock_guard<std::recursive_mutex> lock(m_StateLock);
   if(m_State == state) return;
+  auto oldState = m_State;
   m_State = state;
-  emit stateChanged(m_State, state);
+  emit stateChanged(oldState, m_State);
+}
+
+void Connection::registerJsonMetaTypes() {
+  if(m_IsRegistered) return;
+  QJsonSerializer::registerMapConverters<QJsonDocument>();
+
+  m_IsRegistered = true;
 }
 
 QtPromise::QPromise<void> Connection::start(std::shared_ptr<http::IHttpClient> pHttpClient) {
@@ -178,11 +204,11 @@ QtPromise::QPromise<void> Connection::start(std::shared_ptr<transports::IClientT
   if(pClientTransport == nullptr) throw QException();
 
   std::lock_guard<std::mutex> lock(m_StartLock);
-  if(!changeState(ConnectionState::Disconnected, ConnectionState::Connecting))
-      return m_ConnectTask;
+  if(!Connection::changeState(ConnectionState::Disconnected, ConnectionState::Connecting))
+      return QtPromise::QPromise<void>::reject(QString("State doens't be changed!"));
 
-  m_pClientTransport = std::move(pClientTransport);
-  m_ConnectTask = negotiate(m_pClientTransport);
+  m_pClientTransport = pClientTransport;
+  m_ConnectTask = negotiate(pClientTransport);
   return m_ConnectTask;
 }
 
@@ -191,73 +217,96 @@ QString Connection::onSending() {
 }
 
 QtPromise::QPromise<void> Connection::negotiate(std::shared_ptr<transports::IClientTransport> pClientTransport) {
-  auto negotiationAttempts = 0;  
+  auto negotiationAttempts = 0;
   auto pIConnection = std::dynamic_pointer_cast<IConnection>(shared_from_this());
 
+  using QtPromise::QPromise;
+  using QtPromise::QPromiseResolve;
+  using QtPromise::QPromiseReject;
+
+  std::function<QPromise<void>()> negotiation
+          = std::function<QPromise<void>()>([&]{
+      return pClientTransport->negotiate(pIConnection, m_ConnectionData)
+        .then([&](const NegotiationResponse& negotiationResponse) {
+
+            auto protocolVersion = verifyProtocolVersion(negotiationResponse.getProtocolVersion());
+            if(protocolVersion >= m_MinimumSupportedNegotiateRedirectVersion) {
+
+              if(!negotiationResponse.getError().isNull() || !negotiationResponse.getError().isEmpty()) {
+                throw QException(); //Start Exception.
+              }
+
+              if(!negotiationResponse.getRedirectUrl().isNull() || !negotiationResponse.getRedirectUrl().isEmpty()) {
+                auto splitUrlAndQuery = negotiationResponse.getRedirectUrl().split('?');
+                splitUrlAndQuery.move(0,2);
+
+                m_ActualUrl = splitUrlAndQuery[0];
+
+                if(splitUrlAndQuery.length() == 2 && (!splitUrlAndQuery[1].isNull() || !splitUrlAndQuery.isEmpty())) {
+                  m_ActualQueryString = splitUrlAndQuery[1];
+                }
+                else {
+                  m_ActualQueryString = m_UserQueryString;
+                }
+
+                if(!m_ActualUrl.endsWith("/")) {
+                  m_ActualUrl += "/";
+                }
+
+                if(!negotiationResponse.getAccessToken().isNull() || !negotiationResponse.getAccessToken().isEmpty()) {
+                   m_Headers.append(QPair<QString, QString>("Authorization", QString("Bearer %1").arg(negotiationResponse.getAccessToken())));
+                }
+
+                //negotiationAttempts += 1;
+                if(negotiationAttempts >= m_MaxRedirects) {
+                   throw QException();
+                }
+                return negotiation();
+              }
+          }
+          m_ConnectionId = negotiationResponse.getConnectionId();
+          m_ConnectionToken = negotiationResponse.getConnectionToken();
+          m_DisconnectTimeout = TimeDelta::FromSeconds(5);
+          m_TotalTransportConnectTimeout = m_TransportConnectTimeout + TimeDelta::FromSeconds(negotiationResponse.getTransportConnectTimeout());
+
+          auto beatInterval = TimeDelta::FromSeconds(5);
+
+          if(negotiationResponse.getKeepAliveTimeout().has_value()) {
+            m_KeepAliveData = KeepAliveData(TimeDelta::FromSeconds(negotiationResponse.getKeepAliveTimeout().value()));
+            m_ReconnectWindow = m_DisconnectTimeout + m_KeepAliveData.getTimeout();
+
+            beatInterval = m_KeepAliveData.getCheckInterval();
+          }
+          else {
+            m_ReconnectWindow = m_DisconnectTimeout;
+          }
+          m_pMonitor = std::make_shared<HeartBeatMonitor>(shared_from_this(), std::make_shared<std::mutex>(), beatInterval);
+          return startTransport();
+      }).fail([&](const QException& ex){
+        QPromise<void>::reject(QString("Exception error %1").arg(ex.what()));
+      });
+  });
+
   m_ConnectionData = onSending();
-  return startNegotiation(pIConnection, negotiationAttempts);
+  return negotiation();
 }
 
-QtPromise::QPromise<void> Connection::completeNegotiation(std::shared_ptr<IConnection> pIConnection, int& negotiationAttempts, const NegotiationResponse& negotiationResponse) {
-  m_ConnectionId = negotiationResponse.getConnectionId();
-  m_ConnectionToken = negotiationResponse.getConnectionToken();
-  m_DisconnectTimeout = TimeDelta::FromSeconds(5);
-  m_TotalTransportConnectTimeout = m_TransportConnectTimeout + TimeDelta::FromSeconds(negotiationResponse.getTransportConnectTimeout());
 
-  auto beatInterval = TimeDelta::FromSeconds(5);
-
-  if(negotiationResponse.getKeepAliveTimeout().has_value()) {
-    m_KeepAliveData = KeepAliveData(TimeDelta::FromSeconds(negotiationResponse.getKeepAliveTimeout().value()));
-    m_ReconnectWindow = m_DisconnectTimeout + m_KeepAliveData.getTimeout();
-
-    beatInterval = m_KeepAliveData.getCheckInterval();
-  }
-  else {
-    m_ReconnectWindow = m_DisconnectTimeout;
-  }
-  // Monitor = new HeartbeatMonitor(this, _stateLock, beatInterval);
-  return startTrasport();
-}
-
-QtPromise::QPromise<void> Connection::startNegotiation(std::shared_ptr<IConnection> pIConnection, int& negotiationAttempts) {
-    return m_pClientTransport->negotiate(pIConnection, m_ConnectionData)
-      .then([&](const NegotiationResponse& negotiationResponse) {
-         QVersionNumber protocolVersion;
-         if(protocolVersion >= m_MinimumSupportedNegotiateRedirectVersion) {
-           if(!negotiationResponse.getError().isNull() || !negotiationResponse.getError().isEmpty()) throw QException();
-           if(!negotiationResponse.getRedirectUrl().isNull() || !negotiationResponse.getRedirectUrl().isEmpty()) {
-             auto splitUrlAndQuery = negotiationResponse.getRedirectUrl().split('?');
-             m_ActualUrl = splitUrlAndQuery[0];
-             splitUrlAndQuery.length() == 2 && !(splitUrlAndQuery[1].isNull() || splitUrlAndQuery[1].isEmpty())
-                     ? m_ActualQueryString = splitUrlAndQuery[1] : m_ActualQueryString = m_UserQueryString ;
-
-             if(!m_ActualUrl.endsWith("/")) m_ActualUrl += "/";
-             if(!negotiationResponse.getAccessToken().isNull() || !negotiationResponse.getAccessToken().isEmpty()) {
-                QPair<QString, QString> header;
-                header.first = "Authorization";
-                header.second = "Bearer "+ negotiationResponse.getAccessToken();
-                m_Headers.append(header);
-             }
-             negotiationAttempts += 1;
-             if(negotiationAttempts >= m_MaxRedirects) throw QException();
-             return completeNegotiation(pIConnection, negotiationAttempts, negotiationResponse);
-           }
-         }
-
-         return completeNegotiation(pIConnection, negotiationAttempts, negotiationResponse);
-    }).fail([&]() {
-      disconnect();
-    });
-}
-
-QtPromise::QPromise<void> Connection::startTrasport() {
-   return m_pClientTransport->start(shared_from_this(), m_ConnectionData)
-           //RunSync
-           .then([&]() { m_LastQueuedReceiveTask; });
+QtPromise::QPromise<void> Connection::startTransport() {
+  return m_pClientTransport->start(std::shared_ptr<Connection>(this), m_ConnectionData)
+   .then([&](){
+      std::scoped_lock<std::recursive_mutex> lock(m_StateLock);
+      if (!Connection::changeState(ConnectionState::Connecting, ConnectionState::Connected)) throw QException();
+      m_LastMessageAt = QDateTime::currentDateTimeUtc();
+      m_LastActiveAt = QDateTime::currentDateTimeUtc();
+      m_pMonitor->start();
+  }).then([&]() {
+      m_LastQueuedReceiveTask;
+  });
 }
 
 bool Connection::changeState(ConnectionState oldState, ConnectionState newState) {
-  std::lock_guard<std::mutex> lock (m_StateLock);
+  std::scoped_lock<std::recursive_mutex> lock (m_StateLock);
   if(m_State != oldState) return false;
   //trace.
   setConnectionState(newState);
@@ -297,12 +346,12 @@ void Connection::stop(const TimeDelta& timeout) {
   //taskQueue
   if(m_State == ConnectionState::Disconnected) return;
   //trace
-  m_pClientTransport->abort(shared_from_this(), timeout, m_ConnectionData);
+  m_pClientTransport->abort(std::shared_ptr<Connection>(this), timeout, m_ConnectionData);
   disconnect();
 }
 
 void Connection::disconnect() {
-  std::lock_guard<std::mutex> lock (m_StateLock);
+  std::lock_guard<std::recursive_mutex> lock (m_StateLock);
   if(m_State == ConnectionState::Disconnected) return;
   setConnectionState(ConnectionState::Disconnected);
   //trace.
@@ -341,20 +390,20 @@ QtPromise::QPromise<void> Connection::send(const QObject& data) {
 }
 
 void Connection::setClientCertificate(QSslConfiguration configuration) {
-  std::lock_guard<std::mutex> lock (m_StateLock);
+  std::lock_guard<std::recursive_mutex> lock (m_StateLock);
   if(m_State != ConnectionState::Disconnected) throw QException();
-  m_CertCollection.append(configuration);
+  m_CertCollection = std::move(configuration);
 }
 
 //trace method.
 
-void Connection::onReceived(const QJsonDocument &data) {
+void Connection::onReceived(const QJsonValue &data) {
   //m_LastQueuedReceiveTask =
   onMessageReceived(data);
 }
 
-void Connection::onMessageReceived(const QJsonDocument &message) {
-  emit received(message.toJson());
+void Connection::onMessageReceived(const QJsonValue &message) {
+  emit received(QJsonDocument(message.toObject()).toJson());
 }
 
 void IConnection::onError(const QException& error) {
@@ -403,8 +452,8 @@ QString Connection::createUserAgentString(const QString& client) {
 }
 
 bool Connection::tryParseVersion(const QString& versionString, QVersionNumber& version) {
-  version = version.fromString(versionString);
-  return version.isNull();
+  version = QVersionNumber::fromString(versionString);
+  return !version.isNull();
 }
 
 QString Connection::createQueryString(const QList<QPair<QString, QString>>& queryString) {
@@ -413,6 +462,17 @@ QString Connection::createQueryString(const QList<QPair<QString, QString>>& quer
     query << qs.first + "=" + qs.second;
   }
   return query.join("&");
+}
+
+QString Connection::jsonSerializeObject(std::shared_ptr<IConnection> pConnection, const QVariant& value) {
+  if(pConnection == nullptr) throw QException();
+
+  QBuffer writer;
+  writer.open(QBuffer::ReadWrite);
+
+  pConnection->getJsonSerializer()->serializeTo(&writer, value);
+  QString json = writer.buffer();
+  return json;
 }
 
 }

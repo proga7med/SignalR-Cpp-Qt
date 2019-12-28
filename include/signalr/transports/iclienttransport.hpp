@@ -1,7 +1,7 @@
 #ifndef ICLIENTTRANSPORT_HPP
 #define ICLIENTTRANSPORT_HPP
 
-#include <future>
+#include <memory>
 #include <QString>
 
 #include <QtPromise>
@@ -23,6 +23,7 @@ public:
   virtual void abort(std::shared_ptr<IConnection> pConnection, const TimeDelta& timeout, const QString& connectionData) = 0;
   virtual QString getName() const = 0;
   virtual bool isKeepAliveSupported() const = 0;
+  virtual void lostConnection(std::shared_ptr<IConnection> pConnection) = 0;
   virtual ~IClientTransport() = default;
 
 };

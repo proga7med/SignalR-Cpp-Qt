@@ -1,0 +1,4 @@
+add_executable(QSignalRSample main.cpp)
+target_include_directories(QSignalRSample PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_compile_features(QSignalRSample PRIVATE cxx_std_17)
+target_link_libraries(QSignalRSample PRIVATE SignalRClient)

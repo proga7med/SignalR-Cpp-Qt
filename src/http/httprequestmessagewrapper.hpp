@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QNetworkRequest>
 
-#include "signalr/http/irequest.hpp"
+#include "http/irequest.hpp"
 
 namespace signalr {
 namespace http {
@@ -12,24 +12,26 @@ namespace http {
 class HttpRequestMessageWrapper : public QObject, public IRequest {
 	Q_OBJECT
 public:
-    HttpRequestMessageWrapper(std::shared_ptr<QNetworkRequest> networkRequest);
+  HttpRequestMessageWrapper(QNetworkRequest& networkRequest);
 
-	virtual QString getUserAgent() const override;
-	virtual void setUserAgent(QString userAgent) override;
+  virtual QString getUserAgent() const override;
+  virtual void setUserAgent(QString userAgent) override;
 
-	virtual QString getAccept() const override;
-	virtual void setAccept(QString accept) override;
+  virtual QString getAccept() const override;
+  virtual void setAccept(QString accept) override;
 
-	virtual void abort() override;
-    virtual void setRequestHeaders(QList<QPair<QString, QString>> &headers) override;
+  virtual void abort() override;
+  virtual void setRequestHeaders(QList<QPair<QString, QString>> &headers) override;
 
-	virtual ~HttpRequestMessageWrapper() = default;
+  virtual ~HttpRequestMessageWrapper() = default;
 
 signals:
-	void cancel();
+  void cancel();
 
 private:
-    std::shared_ptr<QNetworkRequest> m_pNetworkRequest;
+  QNetworkRequest m_NetworkRequest;
+  QString m_UserAgent;
+  QString m_Accept;
 };
 
 }

@@ -5,10 +5,11 @@
 
 #include <QDateTime>
 #include <QNetworkProxy>
+#include <QNetworkCookie>
 #include <QVersionNumber>
-#include <QNetworkCookieJar>
-#include <QSslConfiguration>
 #include <QAuthenticator>
+#include <QJsonSerializer>
+#include <QSslConfiguration>
 
 #include "http/irequest.hpp"
 #include "keepalivedata.hpp"
@@ -56,7 +57,7 @@ public:
 
   virtual QtPromise::QPromise<void> send(const QString& data) = 0;
 
-  virtual void onReceived(const QJsonDocument &data) = 0;
+  virtual void onReceived(const QJsonValue &data) = 0;
   virtual void onError(const QException& error) = 0;
   virtual void onReconnecting() = 0;
   virtual void onReconnected() = 0;
@@ -102,14 +103,15 @@ public:
   virtual QNetworkProxy getProxy () const = 0;
   virtual void setProxy(QNetworkProxy proxy) = 0;
 
-  virtual QList<QSslConfiguration> getCertificates() const = 0;
+  virtual void setClientCertificate(QSslConfiguration configuration) = 0;
+  virtual QSslConfiguration getCertificate() const = 0;
   virtual QList<QPair<QString, QString>> getHeaders() const = 0;
 
   virtual QAuthenticator getCredentials() const = 0;
   virtual void setCredentials(QAuthenticator credential) = 0;
 
-  virtual std::shared_ptr<QNetworkCookieJar> getCookieContainer() const = 0;
-  //JsonSerializer
+  virtual QList<QNetworkCookie> getCookieContainer() const = 0;
+  virtual std::shared_ptr<QJsonSerializer> getJsonSerializer() const = 0;
 
   virtual ~IConnection() = default;
 

@@ -5,21 +5,30 @@
 #include <memory>
 
 #include <QObject>
+#include <QJsonSerializer>
 #include <QSslConfiguration>
 
 #include <QtPromise>
 #include <time_delta.h>
 
+#include "signalr/heartbeatmonitor.hpp"
 #include "signalr/iconnection.hpp"
 
 namespace signalr {
+namespace hubs {
+class HubConnection;
+}
 
-class Connection : public IConnection, std::enable_shared_from_this<Connection> {
+class Connection : public virtual IConnection, public std::enable_shared_from_this<Connection> {
   Q_OBJECT
 public:
   Connection(QString url);
   Connection(QString url, QList<QPair<QString, QString>> queryString);
   Connection(QString url, QString queryString);
+
+public:
+  virtual TimeDelta getTrasnportConnectTimeout() const override;
+  virtual void setTransportConnectTimeout(TimeDelta transportConnectTimeout) override;
 
   virtual TimeDelta getTotalTransportConnectTimeout() const override;
 
@@ -35,10 +44,10 @@ public:
   virtual QDateTime getLastMessageAt() const override;
   virtual QDateTime getLastActiveAt() const override;
 
-  virtual QList<QSslConfiguration> getCertificates() const override;
-  //jsonserializer
+  virtual QSslConfiguration getCertificate() const override;
+  virtual std::shared_ptr<QJsonSerializer> getJsonSerializer() const override;
 
-  virtual std::shared_ptr<QNetworkCookieJar> getCookieContainer() const override;
+  virtual QList<QNetworkCookie> getCookieContainer() const override;
 
   virtual QAuthenticator getCredentials() const override;
   virtual void setCredentials(QAuthenticator credential) override;
@@ -78,29 +87,31 @@ public:
   virtual void disconnect() override;
   virtual QtPromise::QPromise<void> send(const QString& data) override;
   QtPromise::QPromise<void> send(const QObject& data);
-  void setClientCertificate(QSslConfiguration configuration);
+  virtual void setClientCertificate(QSslConfiguration configuration) override;
   virtual void prepareRequest(std::shared_ptr<http::IRequest> pRequest) override;
   virtual void markLastMessage() override;
   virtual void markArchive() override;
-
 
   QException getLastError() const;
 
   virtual ~Connection() = default;
 
+public:
+   static QString jsonSerializeObject(std::shared_ptr<IConnection> pConnection, const QVariant &value);
+
 protected:
   virtual QString onSending();
   virtual void onClosed();
-  virtual void onMessageReceived(const QJsonDocument &message);
+  virtual void onMessageReceived(const QJsonValue &message);
 
 private:
-  virtual void onReceived(const QJsonDocument &data) override;
+  virtual void onReceived(const QJsonValue &data) override;
   virtual void onError(const QException& error) override;
   virtual void onReconnecting() override;
   virtual void onReconnected() override;
   virtual void onConnectionSlow() override;
   QtPromise::QPromise<void> negotiate(std::shared_ptr<transports::IClientTransport> pClientTransport);
-  QtPromise::QPromise<void> startTrasport();
+  QtPromise::QPromise<void> startTransport();
   virtual bool changeState(ConnectionState oldState, ConnectionState newState) override;
   QVersionNumber verifyProtocolVersion(const QString& versionString);
   static QString createUserAgentString(const QString& client);
@@ -108,8 +119,7 @@ private:
   static QString createQueryString(const QList<QPair<QString, QString>>& queryString);
   //setTimeout
   void setConnectionState(ConnectionState state);
-  QtPromise::QPromise<void> startNegotiation(std::shared_ptr<IConnection> pIConnection, int& negotiationAttempts);
-  QtPromise::QPromise<void> completeNegotiation(std::shared_ptr<IConnection> pIConnection, int& negotiationAttempts, const NegotiationResponse& negotiationResponse);
+  void registerJsonMetaTypes();
 
 private:
   static TimeDelta m_DefaultAbortTimeout;
@@ -118,6 +128,9 @@ private:
   static QVersionNumber m_MinimumSupportedNegotiateRedirectVersion;
   static int m_MaxRedirects;
   static QVersionNumber m_AssemblyVersion;
+
+private:
+  friend class hubs::HubConnection;
 
 private:
   std::shared_ptr<transports::IClientTransport> m_pClientTransport;
@@ -133,18 +146,18 @@ private:
   //TaskQueueMonitor.
   QtPromise::QPromise<void> m_LastQueuedReceiveTask;
   //DispatchingTaskCompletionSource.
-  std::mutex m_StateLock;
+  std::recursive_mutex m_StateLock;
   std::mutex m_StartLock;
   //tracemutex
   QDateTime m_LastMessageAt;
   QDateTime m_LastActiveAt;
-  //JsonSerializer
-  QList<QSslConfiguration> m_CertCollection;
+  std::shared_ptr<QJsonSerializer> m_pJsonSerializer;
+  QSslConfiguration m_CertCollection;
   QString m_UserUrl;
   QString m_ActualUrl;
   QString m_UserQueryString;
   QString m_ActualQueryString;
-  //HeartbeatMonitor
+  std::shared_ptr<HeartBeatMonitor> m_pMonitor;
   TimeDelta m_TransportConnectTimeout;
   TimeDelta m_DeadlockErrorTimeout;
   QException m_LastError;
@@ -157,7 +170,8 @@ private:
   QNetworkProxy m_Proxy;
   QList<QPair<QString, QString>> m_Headers;
   QAuthenticator m_Credentials;
-  std::shared_ptr<QNetworkCookieJar> m_pCookieContainer;
+  QList<QNetworkCookie> m_CookieContainer;
+  static bool m_IsRegistered;
 };
 
 }

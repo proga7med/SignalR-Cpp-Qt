@@ -11,7 +11,7 @@ QString HttpResponseMessageWrapper::readAsString() {
   return m_pNetworkReply->readAll();
 }
 
-QDataStream HttpResponseMessageWrapper::getStream() const {
+QByteArray HttpResponseMessageWrapper::getStream() const {
   return m_pNetworkReply->readAll();
 }
 

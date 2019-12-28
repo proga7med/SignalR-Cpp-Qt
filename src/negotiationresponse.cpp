@@ -26,6 +26,14 @@ void NegotiationResponse::setUrl(QString url) {
   m_Url = std::move(url);
 }
 
+QString NegotiationResponse::getProtocolVersion() const {
+  return m_ProtocolVersion;
+}
+
+void NegotiationResponse::setProtocolVersion(QString protocolVersion) {
+  m_ProtocolVersion = std::move(protocolVersion);
+}
+
 double NegotiationResponse::getDisconnectTimeout() const {
   return m_DisconnectTimeout;
 }
@@ -34,12 +42,12 @@ void NegotiationResponse::setDisconnectTimeout(double disconnectTimeout) {
   m_DisconnectTimeout = disconnectTimeout;
 }
 
-bool NegotiationResponse::getTryWebSocket() const {
+bool NegotiationResponse::getTryWebSockets() const {
   return m_TryWebSockets;
 }
 
-void NegotiationResponse::setTryWebSocket(bool tryWebSocket) {
-   m_TryWebSockets = tryWebSocket;
+void NegotiationResponse::setTryWebSockets(bool tryWebSockets) {
+   m_TryWebSockets = tryWebSockets;
 }
 
 

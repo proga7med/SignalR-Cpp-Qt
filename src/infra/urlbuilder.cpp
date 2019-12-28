@@ -150,7 +150,7 @@ void UrlBuilder::appendNoCacheUrlParam(QString& urlStringBuilder) {
 QUrl UrlBuilder::convertToWebSocketUri(const QString& uriString) {
   QUrl uriBuilder = QUrl(uriString);
   if(uriBuilder.scheme() != "http" && uriBuilder.scheme() != "https") throw QException();
-  uriBuilder.setScheme("https" ? "wss" : "ws");
+  uriBuilder.setScheme(uriBuilder.scheme() == "https" ? "wss" : "ws");
   return uriBuilder;
 }
 
